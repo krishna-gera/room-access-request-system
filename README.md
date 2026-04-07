@@ -1,4 +1,4 @@
-# Room Access Request System
+# Saptak Container Access App
 
 Flutter app for managing container-room access requests with role-based flows:
 - Student: create request, view approvals, show QR pass.
