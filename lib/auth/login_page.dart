@@ -44,7 +44,7 @@ class _LoginPageState extends State<LoginPage> {
       } else if (role == 'admin') {
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AdminHome()));
       } else if (role == 'guard') {
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => GuardHome()));
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GuardHome()));
       } else {
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const TechAdminHome()));
       }
