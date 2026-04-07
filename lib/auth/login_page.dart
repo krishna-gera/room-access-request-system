@@ -69,7 +69,7 @@ class _LoginPageState extends State<LoginPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 30),
-                  Text("Saptak Container Access",
+                  Text("Room Access Request System",
                       style: Theme.of(context).textTheme.headlineMedium),
                   const SizedBox(height: 6),
                   Text("Login to request / approve / verify access",

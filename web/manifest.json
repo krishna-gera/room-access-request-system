@@ -1,6 +1,6 @@
 {
-    "name": "saptak_access_app",
-    "short_name": "saptak_access_app",
+    "name": "Room Access Request System",
+    "short_name": "Room Access",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
