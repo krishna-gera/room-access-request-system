@@ -28,19 +28,17 @@ class QRPassPage extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
+                  color: Colors.black, // 🔥 dark background required
                   borderRadius: BorderRadius.circular(22),
-                  border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outlineVariant,
+                  ),
                 ),
                 child: QrImageView(
-                    data: payload,
-                    size: 260,
-                    foregroundColor: Colors.white,   // QR dots color
-                    backgroundColor: Colors.black, // or Colors.black if you want contrast
-                  ),
-                  dataModuleStyle: const QrDataModuleStyle(
-                    dataModuleShape: QrDataModuleShape.square,
-                    color: Colors.white,
-                  ),
+                  data: payload,
+                  size: 260,
+                  foregroundColor: Colors.white,
+                  backgroundColor: Colors.transparent,
                 ),
               ),
 
