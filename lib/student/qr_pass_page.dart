@@ -35,7 +35,7 @@ class QRPassPage extends StatelessWidget {
                     data: payload,
                     size: 260,
                     foregroundColor: Colors.white,   // QR dots color
-                    backgroundColor: Colors.transparent, // or Colors.black if you want contrast
+                    backgroundColor: Colors.black, // or Colors.black if you want contrast
                   ),
                   dataModuleStyle: const QrDataModuleStyle(
                     dataModuleShape: QrDataModuleShape.square,
