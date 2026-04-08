@@ -1,17 +1,40 @@
-# saptak_access_app
+# Room Access Request System
 
-A new Flutter project.
+Flutter app for managing container-room access requests with role-based flows:
+- Student: create request, view approvals, show QR pass.
+- Admin: review and approve requests.
+- Guard: scan QR and validate time-window access.
+- Tech Admin: placeholder dashboard.
 
-## Getting Started
+## Setup
 
-This project is a starting point for a Flutter application.
+1. Install Flutter SDK.
+2. Install dependencies:
+   ```bash
+   flutter pub get
+   ```
+3. Configure environment variables in `.env`:
+   ```env
+   SUPABASE_URL=https://your-project.supabase.co
+   SUPABASE_ANON_KEY=your-anon-key
+   ```
+4. Run app:
+   ```bash
+   flutter run
+   ```
 
-A few resources to get you started if this is your first Flutter project:
+A sample file is included at `.env.example`.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Supabase setup (required)
+
+Run these SQL files in Supabase SQL Editor:
+
+1. `supabase/schema.sql` (creates all required tables)
+2. `supabase/seed.sql` (adds sample role/profile/member data after Auth users are created)
+
+Then create Auth users (email/password) from Supabase Dashboard or Admin API for:
+- student1, student2
+- admin1, admin2
+- guard
+- techadmin
