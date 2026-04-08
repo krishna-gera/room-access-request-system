@@ -38,3 +38,16 @@ Then create Auth users (email/password) from Supabase Dashboard or Admin API for
 - admin1, admin2
 - guard
 - techadmin
+
+Important role values for `public.profiles.role`:
+- `student`
+- `admin`
+- `guard`
+- `tech_admin` (must include underscore)
+
+Quick fix if Tech Admin role insert/update fails:
+```sql
+update public.profiles
+set role = 'tech_admin'
+where email = 'techadmin@example.com';
+```
