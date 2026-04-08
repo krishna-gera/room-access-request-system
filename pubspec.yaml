@@ -1,5 +1,5 @@
 name: saptak_access_app
-description: "Saptak Container Access System"
+description: "Room Access Request System"
 publish_to: "none"
 
 version: 1.0.0+1

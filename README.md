@@ -1,4 +1,4 @@
-# Saptak Container Access App
+# Room Access Request System
 
 Flutter app for managing container-room access requests with role-based flows:
 - Student: create request, view approvals, show QR pass.
@@ -24,3 +24,17 @@ Flutter app for managing container-room access requests with role-based flows:
    ```
 
 A sample file is included at `.env.example`.
+
+
+## Supabase setup (required)
+
+Run these SQL files in Supabase SQL Editor:
+
+1. `supabase/schema.sql` (creates all required tables)
+2. `supabase/seed.sql` (adds sample role/profile/member data after Auth users are created)
+
+Then create Auth users (email/password) from Supabase Dashboard or Admin API for:
+- student1, student2
+- admin1, admin2
+- guard
+- techadmin

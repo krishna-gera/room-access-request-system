@@ -23,7 +23,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Saptak Container Access',
+      title: 'Room Access Request System',
       theme: AppTheme.light(),
       debugShowCheckedModeBanner: false,
       home: const LoginPage(),

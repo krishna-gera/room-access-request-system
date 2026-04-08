@@ -6,7 +6,7 @@ void main() {
   testWidgets('Login page renders expected text', (tester) async {
     await tester.pumpWidget(const TestApp());
 
-    expect(find.text('Saptak Container Access'), findsOneWidget);
+    expect(find.text('Room Access Request System'), findsOneWidget);
     expect(find.text('Login'), findsOneWidget);
   });
 }
