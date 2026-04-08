@@ -75,8 +75,10 @@ class _RequestFormPageState extends State<RequestFormPage> {
 
       if (profile == null) throw Exception("Profile missing.");
 
-      final email = profile['email'] as String;
-      final name = profile['name'] as String;
+      final email = (profile['email'] as String?) ?? user.email ?? '';
+      final name = (profile['name'] as String?) ?? 'Student';
+
+      if (email.isEmpty) throw Exception('Profile email is missing.');
 
       // 🔥 KEY LOGIC: verify saptak id before creating request
       final ok = await SupabaseService.verifySaptakId(

@@ -4,8 +4,14 @@ class SupabaseService {
   static final supabase = Supabase.instance.client;
 
   static Future<Map<String, dynamic>?> getProfile(String userId) async {
-    final res = await supabase.from('profiles').select().eq('id', userId).maybeSingle();
-    return res;
+    final byId = await supabase.from('profiles').select().eq('id', userId).maybeSingle();
+    if (byId != null) return byId;
+
+    final email = supabase.auth.currentUser?.email;
+    if (email == null || email.isEmpty) return null;
+
+    final byEmail = await supabase.from('profiles').select().eq('email', email).maybeSingle();
+    return byEmail;
   }
 
   static Future<bool> verifySaptakId(String saptakId, String email) async {
