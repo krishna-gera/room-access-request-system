@@ -34,6 +34,15 @@ class QRPassPage extends StatelessWidget {
                 child: QrImageView(
                   data: payload,
                   size: 260,
+                  backgroundColor: Colors.black,
+                  eyeStyle: const QrEyeStyle(
+                    eyeShape: QrEyeShape.square,
+                    color: Colors.white,
+                  ),
+                  dataModuleStyle: const QrDataModuleStyle(
+                    dataModuleShape: QrDataModuleShape.square,
+                    color: Colors.white,
+                  ),
                 ),
               ),
 

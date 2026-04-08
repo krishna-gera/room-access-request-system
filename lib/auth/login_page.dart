@@ -37,15 +37,16 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
-      final role = profile['role'];
+      final role = (profile['role'] ?? '').toString().trim().toLowerCase();
+      final normalizedRole = role.replaceAll('-', '_').replaceAll(' ', '_');
 
-      if (role == 'student') {
+      if (normalizedRole == 'student') {
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const StudentHome()));
-      } else if (role == 'admin') {
+      } else if (normalizedRole == 'admin') {
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AdminHome()));
-      } else if (role == 'guard') {
+      } else if (normalizedRole == 'guard') {
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GuardHome()));
-      } else if (role == 'tech_admin') {
+      } else if (normalizedRole == 'tech_admin') {
         Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const TechAdminHome()));
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
