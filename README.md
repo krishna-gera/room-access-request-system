@@ -23,11 +23,6 @@ Flutter app for managing container-room access requests with role-based flows:
    flutter run
    ```
 
-   Or override Supabase values at runtime:
-   ```bash
-   flutter run --dart-define=SUPABASE_URL=https://your-project.supabase.co --dart-define=SUPABASE_ANON_KEY=your-anon-key
-   ```
-
 A sample file is included at `.env.example`.
 
 
