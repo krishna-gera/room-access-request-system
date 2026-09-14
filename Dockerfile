@@ -1,18 +1,14 @@
-# Production Dockerfile for Flutter Web Application
-# Base image: Official unprivileged Nginx on Alpine (runs non-root, ultra-lightweight)
-FROM nginxinc/nginx-unprivileged:alpine
+# Controlled Vulnerability Demonstration for Experiment 6 (DevSecOps Lab)
+# Base image: Legacy Nginx 1.14.0 Alpine (contains multiple known HIGH & CRITICAL CVEs)
+FROM nginx:1.14.0-alpine
 
-# Set working directory to Nginx HTML root
+# Working directory
 WORKDIR /usr/share/nginx/html
 
-# Copy custom Nginx configuration for Flutter SPA routing and caching
+# Copy configuration and web assets
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# Copy compiled Flutter web release assets into html root (overwriting default index.html)
 COPY build/web/ .
 
-# Expose unprivileged HTTP port (8080)
 EXPOSE 8080
 
-# Run Nginx in foreground
 CMD ["nginx", "-g", "daemon off;"]
