@@ -1,0 +1,49 @@
+name: Docker Image Security Scanning (Trivy)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  docker-security-scan:
+    name: Build Docker Image & Run Trivy Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 2. Set up Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.x'
+          channel: 'stable'
+          cache: true
+
+      - name: 3. Install Dependencies
+        run: flutter pub get
+
+      - name: 4. Build Flutter Web Application
+        run: flutter build web --release
+
+      - name: 5. Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 6. Build Docker Image
+        run: |
+          docker build -t experiment-6-app:latest .
+          docker images | grep experiment-6-app
+
+      - name: 7. Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          scan-type: 'image'
+          scan-ref: 'experiment-6-app:latest'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: false
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'

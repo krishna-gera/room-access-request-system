@@ -1,0 +1,28 @@
+# Version control
+.git
+.gitignore
+
+# Environment and sensitive data
+.env
+.env.*
+
+# Flutter / Dart build and project caches
+.dart_tool/
+.packages
+.pub/
+.pub-cache/
+
+# Platform native project files (not needed for web container)
+android/
+ios/
+linux/
+macos/
+windows/
+test/
+supabase/
+
+# Documentation and IDE
+.idea/
+.vscode/
+*.iml
+*.md
