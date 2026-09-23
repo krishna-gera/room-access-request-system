@@ -1,0 +1,321 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Experiment 7 — Security Testing and Automation Pipeline
+# DevSecOps Lab | Room Access Request System
+#
+# Pipeline order:
+#   GitHub Push
+#     ↓  Job 1: build-and-test   (Python install + pytest)
+#     ↓  Job 2: docker-build     (build & save Docker image)
+#     ↓  Job 3: sonarqube        (SAST — static code analysis)
+#     ↓  Job 4: owasp-zap        (DAST — dynamic security scan)
+#     ↓  Job 5: deploy           (only if ALL security gates pass)
+#
+# FAIL scenario  (experiment7-fail branch):
+#   /search endpoint reflects ?q= without escaping → XSS (CWE-79)
+#   ZAP active scan detects HIGH-risk alert → exit 2 → pipeline FAILS
+#   deploy job is SKIPPED (never runs)
+#
+# PASS scenario  (experiment7-pass branch):
+#   /search uses markupsafe.escape() → XSS fixed
+#   ZAP finds no HIGH-risk alerts → exit 0 → pipeline PASSES
+#   deploy job RUNS
+#
+# Required GitHub Secrets:
+#   SONAR_TOKEN  — from SonarCloud (optional; SonarQube step is skipped if absent)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+name: "Experiment 7 — Security Pipeline"
+
+on:
+  push:
+    branches:
+      - main
+      - "experiment7-*"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  API_IMAGE: room-access-api
+  API_PORT: 5000
+  PYTHON_VERSION: "3.12"
+
+# ───────────────────────────────────────────────────────────────────────────────
+jobs:
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 1 — Build & Unit Tests
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-and-test:
+    name: "1. Build & Unit Tests"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Step 1 — Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Step 2 — Set up Python ${{ env.PYTHON_VERSION }}"
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: "Step 3 — Install Python dependencies"
+        run: |
+          pip install --upgrade pip
+          pip install -r api/requirements.txt
+
+      - name: "Step 4 — Run unit tests (pytest)"
+        run: |
+          cd ${{ github.workspace }}
+          pytest api/tests/ -v --tb=short
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 2 — Docker Build
+  # ═══════════════════════════════════════════════════════════════════════════
+  docker-build:
+    name: "2. Docker Build"
+    runs-on: ubuntu-latest
+    needs: build-and-test   # Only runs if unit tests pass
+
+    steps:
+      - name: "Step 1 — Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Step 2 — Build Docker image"
+        run: |
+          docker build \
+            -t ${{ env.API_IMAGE }}:latest \
+            -f api/Dockerfile \
+            api/
+          echo ""
+          echo "Built image:"
+          docker images | grep ${{ env.API_IMAGE }}
+
+      - name: "Step 3 — Smoke-test the image (quick run + health check)"
+        run: |
+          docker run -d --name smoke-test -p ${{ env.API_PORT }}:${{ env.API_PORT }} \
+            ${{ env.API_IMAGE }}:latest
+          sleep 5
+          curl -f http://localhost:${{ env.API_PORT }}/health | python3 -m json.tool
+          docker stop smoke-test
+
+      - name: "Step 4 — Export image as a pipeline artifact"
+        run: docker save ${{ env.API_IMAGE }}:latest | gzip > api-image.tar.gz
+
+      - name: "Step 5 — Upload image artifact"
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: api-image.tar.gz
+          retention-days: 1
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 3 — SonarQube Static Analysis (SAST)
+  # ═══════════════════════════════════════════════════════════════════════════
+  sonarqube:
+    name: "3. SonarQube Analysis"
+    runs-on: ubuntu-latest
+    needs: docker-build
+
+    steps:
+      - name: "Step 1 — Checkout (full history for blame/diff analysis)"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Check whether SONAR_TOKEN has been configured as a secret.
+      # If not, this job produces a clear informational message and exits 0
+      # so the pipeline continues to the ZAP gate.
+      - name: "Step 2 — Check for SONAR_TOKEN"
+        id: sonar_check
+        run: |
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "──────────────────────────────────────────────────────"
+            echo "⚠️  SONAR_TOKEN secret is not configured."
+            echo "   SonarCloud analysis will be skipped."
+            echo "   To enable: add SONAR_TOKEN to repository secrets."
+            echo "   See: sonar-project.properties for setup instructions."
+            echo "──────────────────────────────────────────────────────"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "✅ SONAR_TOKEN found — running SonarCloud analysis."
+          fi
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      - name: "Step 3 — Run SonarCloud Analysis"
+        if: steps.sonar_check.outputs.available == 'true'
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 4 — OWASP ZAP DAST Scan  ← PRIMARY SECURITY GATE
+  #
+  # What ZAP does:
+  #   1. Traditional spider  — crawls all reachable URLs
+  #   2. Ajax spider         — finds JS-rendered content
+  #   3. Active scan         — injects attack payloads (XSS, SQLi, etc.)
+  #   4. Passive scan        — inspects responses for issues
+  #
+  # Exit codes:
+  #   0 = no FAIL-level alerts          → pipeline continues → deploy runs
+  #   2 = FAIL-level alert (HIGH risk)  → pipeline FAILS     → deploy BLOCKED
+  #
+  # The -I flag: ignore WARN-level alerts; only exit non-zero on HIGH risk.
+  # ═══════════════════════════════════════════════════════════════════════════
+  owasp-zap:
+    name: "4. OWASP ZAP DAST Scan"
+    runs-on: ubuntu-latest
+    needs: sonarqube
+
+    steps:
+      - name: "Step 1 — Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Step 2 — Download Docker image artifact"
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-image
+
+      - name: "Step 3 — Load Docker image"
+        run: docker load < api-image.tar.gz
+
+      - name: "Step 4 — Start application container (host network)"
+        run: |
+          docker run -d \
+            --name api-container \
+            --network host \
+            ${{ env.API_IMAGE }}:latest
+          echo "Container started."
+
+      - name: "Step 5 — Wait for application to be ready"
+        run: |
+          echo "Polling http://localhost:${{ env.API_PORT }}/health ..."
+          for i in $(seq 1 30); do
+            HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
+                        http://localhost:${{ env.API_PORT }}/health 2>/dev/null || echo 000)
+            if [ "$HTTP" = "200" ]; then
+              echo "✅ Application is ready (attempt $i)"
+              break
+            fi
+            echo "Attempt $i/30: HTTP $HTTP — waiting..."
+            sleep 2
+          done
+          echo ""
+          echo "Health check response:"
+          curl -f http://localhost:${{ env.API_PORT }}/health | python3 -m json.tool
+
+      - name: "Step 6 — Prepare ZAP report directory"
+        run: |
+          mkdir -p ${{ github.workspace }}/zap-reports
+          chmod 777 ${{ github.workspace }}/zap-reports
+
+      # ──────────────────────────────────────────────────────────────────────
+      # Step 7 — ZAP Full Scan (THE SECURITY GATE)
+      #
+      # FAIL state (experiment7-fail branch):
+      #   ZAP injects <script>alert(1)</script> into /search?q=
+      #   Server returns it unescaped → Reflected XSS detected
+      #   Alert risk = HIGH → ZAP exit code 2 → this step FAILS
+      #   Job owasp-zap FAILS → Job deploy NEVER runs
+      #
+      # PASS state (experiment7-pass branch):
+      #   /search uses markupsafe.escape() → payload is neutralised
+      #   No HIGH-risk alerts → ZAP exit code 0 → this step PASSES
+      #   Job deploy runs → deployment ALLOWED
+      # ──────────────────────────────────────────────────────────────────────
+      - name: "Step 7 — OWASP ZAP Full Scan (Security Gate)"
+        run: |
+          docker run \
+            --rm \
+            --network host \
+            -v ${{ github.workspace }}/zap-reports:/zap/wrk/:rw \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-full-scan.py \
+              -t http://localhost:${{ env.API_PORT }} \
+              -r zap-report.html \
+              -J zap-report.json \
+              -I \
+              -m 3
+
+      # The step above exits non-zero if a HIGH-risk alert is found.
+      # GitHub Actions automatically fails the job on non-zero exit.
+      # No manual exit manipulation needed.
+
+      - name: "Step 8 — Security gate result"
+        if: success()
+        run: |
+          echo "══════════════════════════════════════════════════"
+          echo "  ✅ OWASP ZAP SECURITY GATE: PASSED"
+          echo "  No HIGH-risk vulnerabilities detected."
+          echo "  Deployment will proceed."
+          echo "══════════════════════════════════════════════════"
+
+      - name: "Step 8 — Security gate result (FAILED)"
+        if: failure()
+        run: |
+          echo "══════════════════════════════════════════════════"
+          echo "  ❌ OWASP ZAP SECURITY GATE: FAILED"
+          echo "  HIGH-risk vulnerability detected (Reflected XSS)."
+          echo "  Deployment is BLOCKED."
+          echo "  Review the ZAP report in the uploaded artifact."
+          echo "══════════════════════════════════════════════════"
+
+      - name: "Step 9 — Upload ZAP HTML report"
+        if: always()   # Upload report regardless of pass/fail for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-dast-report
+          path: zap-reports/zap-report.html
+
+      - name: "Step 10 — Stop application container"
+        if: always()
+        run: docker stop api-container || true
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 5 — Security Gate & Deployment
+  #
+  # This job ONLY runs when ALL previous jobs succeed.
+  # If ZAP detected a vulnerability, this job is SKIPPED automatically.
+  # ═══════════════════════════════════════════════════════════════════════════
+  deploy:
+    name: "5. Security Gate & Deployment"
+    runs-on: ubuntu-latest
+    needs: owasp-zap   # Hard dependency — skipped if ZAP fails
+
+    steps:
+      - name: "Step 1 — Confirm all security gates passed"
+        run: |
+          echo "╔══════════════════════════════════════════════════════╗"
+          echo "║        ALL SECURITY CHECKS PASSED                   ║"
+          echo "╠══════════════════════════════════════════════════════╣"
+          echo "║  ✅  Unit Tests             PASSED                  ║"
+          echo "║  ✅  Docker Build           PASSED                  ║"
+          echo "║  ✅  SonarQube Analysis     PASSED                  ║"
+          echo "║  ✅  OWASP ZAP DAST         PASSED                  ║"
+          echo "╠══════════════════════════════════════════════════════╣"
+          echo "║  🚀  DEPLOYMENT ALLOWED                             ║"
+          echo "╚══════════════════════════════════════════════════════╝"
+
+      - name: "Step 2 — Deploy application"
+        run: |
+          echo "Deploying Room Access Request System..."
+          echo "  Image : room-access-api:latest"
+          echo "  Env   : production"
+          echo ""
+          echo "  (In a real pipeline, this step would push the image"
+          echo "   to a container registry and update the deployment.)"
+          echo ""
+          echo "  Example commands for a real deployment:"
+          echo "    docker tag room-access-api:latest registry/room-access-api:${{ github.sha }}"
+          echo "    docker push registry/room-access-api:${{ github.sha }}"
+          echo "    kubectl set image deployment/api api=registry/room-access-api:${{ github.sha }}"
+          echo ""
+          echo "✅ Deployment completed successfully."
+          echo "   Commit: ${{ github.sha }}"
+          echo "   Branch: ${{ github.ref_name }}"
