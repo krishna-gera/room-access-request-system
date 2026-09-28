@@ -26,3 +26,12 @@ supabase/
 .vscode/
 *.iml
 *.md
+
+# Python artifacts
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+reports/
+zap-reports/
+

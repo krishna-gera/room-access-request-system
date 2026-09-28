@@ -69,6 +69,12 @@ class TestSearch:
         """GET /search without ?q must still return HTTP 200."""
         assert client.get("/search").status_code == 200
 
+    def test_search_escapes_html(self, client):
+        """GET /search?q=<script> must escape HTML to prevent XSS (CWE-79)."""
+        response = client.get("/search?q=<script>alert(1)</script>")
+        assert b"<script>" not in response.data, "Vulnerability detected: Unescaped <script> tag in search response!"
+        assert b"&lt;script&gt;" in response.data, "Expected &lt;script&gt; escaped entity in search response!"
+
 
 # ─── Security headers (present in both FAIL and PASS states) ─────────────────
 class TestSecurityHeaders:
@@ -83,3 +89,27 @@ class TestSecurityHeaders:
     def test_content_security_policy(self, client):
         """Content-Security-Policy header must be present."""
         assert "Content-Security-Policy" in client.get("/").headers
+
+
+# ════════════════════════════════════════════════════════════════════════════
+#  CLASSROOM DEVSECOPS DEMONSTRATION GATE (OPTION A)
+#  -------------------------------------------------------------------------
+#  To demonstrate a test gate failure during presentation:
+#    1. Set DEMO_GATE_STATUS = "FAIL" below.
+#    2. Commit and push:
+#         git commit -am "demo: trigger controlled unit test failure" && git push
+#    3. The Unit Tests job will FAIL, the Risk Decision job will declare
+#       RISK DECISION: FAIL / Deployment: BLOCKED, and Docker/Deploy will be skipped.
+#    4. Revert DEMO_GATE_STATUS = "PASS", commit and push to see all stages PASS!
+# ════════════════════════════════════════════════════════════════════════════
+DEMO_GATE_STATUS = "PASS"
+
+
+class TestDevSecOpsDemoGate:
+    def test_pipeline_quality_gate(self):
+        """DevSecOps class demo toggle: asserts DEMO_GATE_STATUS is 'PASS'."""
+        assert DEMO_GATE_STATUS == "PASS", (
+            "DEVSECOPS DEMO FAILURE: Quality gate toggle is set to 'FAIL'! "
+            "Pipeline halted, Risk Decision: FAIL, Deployment: BLOCKED."
+        )
+

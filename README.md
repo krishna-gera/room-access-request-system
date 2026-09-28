@@ -290,6 +290,238 @@ Vulnerability found (HIGH risk)          No HIGH-risk vulnerability
 | 16 | Full workflow — all green ✅ |
 | 17 | Job "5. Deployment" — ✅ "Deployment completed successfully" |
 
-## Conclusion
-Experiment 7 demonstrates a practical DevSecOps pipeline where security is enforced automatically and continuously. The OWASP ZAP DAST stage acts as a real, un-bypassable security gate — deployment only proceeds when the application is genuinely free of high-risk vulnerabilities.
+---
+
+# DevSecOps CI/CD Pipeline
+
+A complete, production-grade automated DevSecOps CI/CD pipeline implemented in GitHub Actions for the Room Access Request System.
+
+## Architecture
+
+```
+Developer
+   ↓
+GitHub
+   ↓
+CI Build
+   ↓
+Unit Tests
+   ↓
+Security Tests
+   ↓
+Static Security Scan
+   ↓
+Risk Decision
+   ↓
+Docker Build
+   ↓
+Deploy
+```
+
+## Tools Used
+
+| Tool | Category | Purpose |
+|---|---|---|
+| **GitHub Actions** | CI/CD Orchestration | Workflow automation, stage dependencies, and artifact management |
+| **Python 3.12 / pip** | Build Environment | Dependency resolution and bytecode compilation validation |
+| **pytest / pytest-flask** | Unit Testing | Functional API and security regression tests |
+| **pip-audit** | Software Supply Chain Security | Dependency vulnerability scanning against PyPA advisory database |
+| **Trivy (FS & Image)** | Vulnerability Scanner | Filesystem secret scan and container image CVE detection |
+| **OWASP ZAP Baseline** | DAST | Dynamic application security testing of running web service |
+| **Bandit** | SAST | AST-based static code analysis for Python security vulnerabilities |
+| **SonarQube / SonarCloud** | SAST & Quality Gate | Cloud-native static code analysis (optional via `SONAR_TOKEN`) |
+| **Docker Buildx** | Containerisation | Minimal, non-root hardened production image building |
+
+## Trigger Conditions
+
+The DevSecOps pipeline (`.github/workflows/devsecops.yml`) triggers on:
+- `push` to `main`
+- `push` to `experiment7-*`
+- `pull_request` targeting `main`
+- `workflow_dispatch` (manual trigger from GitHub Actions tab)
+
+## Pipeline Stages
+
+### 1. Build Stage (`build`)
+- Checks out the repository using `actions/checkout@v4`.
+- Configures Python 3.12 with pip cache.
+- Installs dependencies from `api/requirements.txt`.
+- Validates syntax and executes bytecode compilation (`python -m compileall api/`).
+- Verifies required packages (`flask`, `markupsafe`).
+- Publishes build verification summary to GitHub Step Summary and saves build log artifact.
+
+### 2. Unit Testing Stage (`unit-test`)
+- Runs pytest suite (`api/tests/test_app.py`) covering endpoints, JSON response schema, HTTP security headers, and input escaping.
+- Generates JUnit XML test report (`reports/junit-test-results.xml`).
+- Stores test reports as workflow artifacts.
+- Enforces strict gate: Any failing test immediately stops downstream execution.
+
+### 3. Security Testing Stage (`security-test`)
+- **Dependency Audit**: Executes `pip-audit -r api/requirements.txt` to detect vulnerable packages.
+- **Secret Scanning**: Runs Trivy filesystem scanner across the repository to detect exposed API keys, credentials, or private configuration.
+- **DAST (OWASP ZAP)**: Starts local Flask service on `http://localhost:5000`, waits for readiness via `/health`, and runs `zap-baseline.py` against the running service to verify headers, endpoints, and absence of Medium/High-risk vulnerabilities.
+- Uploads `zap-report.html` and `pip-audit.json` artifacts.
+
+### 4. Static Security Scanning Stage (`static-security-scan`)
+- **Bandit SAST**: Scans Python source code (`bandit -r api/ -x api/tests -ll`) with exit-code enforcement on Medium/High security flaws.
+- **SonarCloud SAST**: Integrates with SonarCloud using `sonar-project.properties`. If `SONAR_TOKEN` is present in GitHub Secrets, runs quality gate analysis; if omitted, gracefully logs information and proceeds.
+- Uploads `bandit-report.json` as an artifact.
+
+### 5. Risk Decision & Quality Gate Stage (`risk-decision`)
+- Evaluates the health of all 4 prerequisite jobs (`build`, `unit-test`, `security-test`, `static-security-scan`).
+- Formats console banner and GitHub Step Summary Markdown table:
+  - If **ALL** stages succeed: Declares `Risk Decision: PASS` and `Deployment: ALLOWED`. Exits `0`.
+  - If **ANY** stage fails: Declares `Risk Decision: FAIL` and `Deployment: BLOCKED`. Exits `1`.
+- Because `docker-build` and `deploy` depend on `risk-decision`, any failure automatically prevents image building and deployment.
+
+### 6. Docker Build & Container Scan Stage (`docker-build`)
+- Executes **ONLY** after Risk Decision passes.
+- Uses `api/Dockerfile` (unprivileged `python:3.12-slim` base, non-root user `appuser:1001`, built-in `HEALTHCHECK`).
+- Builds and tags image as `room-access-api:${{ github.sha }}` and `room-access-api:latest`.
+- Scans built container with **Trivy** (`vuln-type: os,library`, `severity: CRITICAL,HIGH`).
+- Performs local container smoke test against `/health`.
+- Exports and uploads compressed Docker image artifact.
+
+### 7. Deployment Gate Stage (`deploy`)
+- Executes **ONLY** after Docker build and container scan succeed.
+- Confirms end-to-end security clearance across all stages.
+- Executes controlled release simulation tagged with git SHA `${{ github.sha }}`.
+- Publishes final deployment table to GitHub Step Summary.
+
+---
+
+## Fail → Fix → Pass Demonstration (Classroom Activity)
+
+This repository includes two safe, reproducible options to demonstrate the DevSecOps quality gates in class:
+
+### OPTION A: Controlled Unit Test Gate Demonstration (Fastest & Simplest)
+
+1. **Trigger Failure (FAIL)**:
+   In `api/tests/test_app.py`, change:
+   ```python
+   DEMO_GATE_STATUS = "PASS"
+   ```
+   to:
+   ```python
+   DEMO_GATE_STATUS = "FAIL"
+   ```
+   Commit and push:
+   ```bash
+   git commit -am "demo: trigger controlled unit test failure"
+   git push origin main
+   ```
+   **Result in CI**:
+   - `Unit Tests` job: **FAIL** ❌
+   - `Risk Decision` job: **FAIL** ❌
+   - Log output:
+     ```
+     ========================================
+            DEVSECOPS RISK DECISION
+     ========================================
+     Build:              PASS
+     Unit Tests:         FAIL
+     Security Tests:     SKIPPED
+     Static Scan:        SKIPPED
+     Risk Decision:      FAIL
+     Deployment:         BLOCKED
+     ========================================
+     ```
+   - `Docker Build`: **SKIPPED** ⏭️
+   - `Deployment`: **BLOCKED / SKIPPED** 🚫
+
+2. **Fix the Failure (FIX → PASS)**:
+   In `api/tests/test_app.py`, revert back:
+   ```python
+   DEMO_GATE_STATUS = "PASS"
+   ```
+   Commit and push:
+   ```bash
+   git commit -am "fix: restore quality gate to passing state"
+   git push origin main
+   ```
+   **Result in CI**:
+   - All jobs: **PASS** ✅
+   - `Risk Decision`: **PASS** ✅
+   - `Docker Build`: **PASS** ✅
+   - `Deployment`: **ALLOWED** 🚀
+
+---
+
+### OPTION B: Controlled Security Gate Demonstration (CWE-79 XSS)
+
+1. **Trigger Failure (FAIL)**:
+   In `api/app.py`, change the search endpoint from safe escaped input:
+   ```python
+   safe_query = escape(query)
+   return (
+       ...
+       f"<p>Results for: {safe_query}</p>"
+   )
+   ```
+   to unescaped input:
+   ```python
+   return (
+       ...
+       f"<p>Results for: {query}</p>"  # unescaped user input
+   )
+   ```
+   Commit and push to a demo branch:
+   ```bash
+   git checkout -b experiment7-fail
+   git commit -am "demo: introduce unescaped reflection [CWE-79]"
+   git push origin experiment7-fail
+   ```
+   **Result in CI**:
+   - `Unit Tests` (XSS assertion) or `OWASP ZAP DAST`: **FAIL** ❌
+   - `Risk Decision`: **FAIL** ❌ (`Deployment: BLOCKED`)
+   - `Docker Build` & `Deployment`: **BLOCKED** 🚫
+
+2. **Fix the Failure (FIX → PASS)**:
+   Re-apply `safe_query = escape(query)` and return `safe_query`.
+   Commit and push:
+   ```bash
+   git commit -am "fix: sanitize query input with markupsafe.escape()"
+   git push origin main
+   ```
+   **Result in CI**:
+   - All stages **PASS** ✅ and Deployment is **ALLOWED** 🚀.
+
+---
+
+## Required GitHub Secrets
+
+| Secret Name | Required? | Purpose |
+|---|---|---|
+| `SONAR_TOKEN` | Optional | SonarCloud token for SAST analysis. If not provided, pipeline uses local Bandit scanner without failing. |
+| `GITHUB_TOKEN` | Automatic | Provided automatically by GitHub Actions for repository access. |
+
+> **Note**: No secrets or private keys are stored in this repository. All credentials must be configured under repository **Settings → Secrets and variables → Actions**.
+
+---
+
+## Local Validation Commands
+
+```bash
+# 1. Setup local environment
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r api/requirements.txt pip-audit bandit
+
+# 2. Run unit tests
+pytest api/tests/ -v
+
+# 3. Run dependency vulnerability scan
+pip-audit -r api/requirements.txt
+
+# 4. Run static security analysis (SAST)
+bandit -r api/ -x api/tests -ll
+
+# 5. Build and run API service
+python api/app.py
+
+# 6. Test endpoints
+curl http://localhost:5000/health
+curl "http://localhost:5000/search?q=Lab101"
+```
+
 

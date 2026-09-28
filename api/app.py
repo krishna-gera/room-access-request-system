@@ -7,6 +7,7 @@ Pipeline:
 """
 
 from flask import Flask, request, jsonify
+from markupsafe import escape
 
 app = Flask(__name__)
 
@@ -55,49 +56,37 @@ def health():
 
 
 # ════════════════════════════════════════════════════════════════════════════
-#  INTENTIONAL LAB VULNERABILITY — CWE-79: Reflected Cross-Site Scripting
-#  ─────────────────────────────────────────────────────────────────────────
-#  EXPERIMENT 7 FAIL SCENARIO — DO NOT USE IN PRODUCTION
+#  DEVSECOPS DEMONSTRATION CONTROL:
+#  -------------------------------------------------------------------------
+#  PASS STATE (Default):
+#    User query is safely escaped with markupsafe.escape(query).
+#    All security tests, SAST, and OWASP ZAP DAST scans pass.
 #
-#  The ?q= query parameter is reflected directly into the HTML response
-#  without ANY sanitisation or escaping.
-#
-#  Attack example:
-#    GET /search?q=<script>alert(document.cookie)</script>
-#    → The script tag appears verbatim in the response HTML.
-#    → A victim who clicks the crafted URL executes the attacker's script.
-#
-#  Detection method:
-#    OWASP ZAP active scan injects standard XSS payloads (e.g.
-#    <script>alert(1)</script>) into ?q=, receives them back unescaped,
-#    and raises a HIGH-risk alert.
-#
-#  Why the pipeline fails:
-#    ZAP exits with code 2 (FAIL-level / HIGH-risk alert found).
-#    GitHub Actions treats exit ≠ 0 as step failure.
-#    The deploy job depends on the ZAP job → deployment is BLOCKED.
-#
-#  How to fix (PASS branch):
-#    from markupsafe import escape
-#    safe_query = escape(query)          # ← replace `query` with `safe_query`
-#    return f"... {safe_query} ..."
-#
+#  FAIL STATE (Classroom Demonstration):
+#    To demonstrate a security gate failure in class, replace `safe_query`
+#    with raw `query` below:
+#      f"<p>Results for: {query}</p>"
+#    This triggers CWE-79 (Reflected XSS), fails the security test,
+#    causes the Risk Decision to FAIL, and BLOCKS deployment.
 # ════════════════════════════════════════════════════════════════════════════
 @app.route("/search")
 def search():
     query = request.args.get("q", "")
+    safe_query = escape(query)
 
-    # VULNERABLE LINE — user input injected into HTML without escaping
     return (
         "<html>"
         "<head><title>Room Search</title></head>"
         "<body>"
         "<h1>Room Search</h1>"
-        f"<p>Results for: {query}</p>"  # ← INTENTIONAL LAB VULNERABILITY
+        f"<p>Results for: {safe_query}</p>"
         "</body>"
         "</html>"
     )
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)  # nosec B104
+
